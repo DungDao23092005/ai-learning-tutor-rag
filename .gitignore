@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+
+# Vector database
+chroma_db/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Data files
+data/uploads/
+*.pdf
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
