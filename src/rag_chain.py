@@ -4,10 +4,36 @@ from src.embedding import get_gemini_client
 
 
 GENERATION_MODELS = [
-    "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
 ]
+
+
+def generate_text_with_fallback(prompt: str) -> str:
+    """
+    Generate text with Gemini using multiple fallback models.
+    """
+    client = get_gemini_client()
+    last_error = None
+
+    for model_name in GENERATION_MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+
+            if response.text:
+                return response.text
+
+        except Exception as error:
+            last_error = error
+
+    raise RuntimeError(
+        f"Failed to generate text with all available models. "
+        f"Last error: {last_error}"
+    )
 
 
 def format_retrieved_context(retrieved_chunks: List[Dict]) -> str:
@@ -78,29 +104,45 @@ def generate_rag_answer(
     if not retrieved_chunks:
         return "I cannot find relevant information in the uploaded document."
 
-    client = get_gemini_client()
-
     prompt = build_rag_prompt(
         question=question,
         retrieved_chunks=retrieved_chunks
     )
 
-    last_error = None
+    return generate_text_with_fallback(prompt)
 
-    for model_name in GENERATION_MODELS:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt
-            )
 
-            if response.text:
-                return response.text
+def generate_document_summary(
+    chunks: List[Dict],
+    max_chunks: int = 12
+) -> str:
+    """
+    Generate a document summary from text chunks.
 
-        except Exception as error:
-            last_error = error
+    To keep the prompt short, only the first max_chunks are used.
+    """
+    if not chunks:
+        return "No document content is available for summarization."
 
-    raise RuntimeError(
-        f"Failed to generate answer with all available models. "
-        f"Last error: {last_error}"
-    )
+    selected_chunks = chunks[:max_chunks]
+    context = format_retrieved_context(selected_chunks)
+
+    prompt = f"""
+You are an AI learning tutor.
+
+Summarize the uploaded learning document using ONLY the provided context.
+
+Requirements:
+1. Write the summary in Vietnamese.
+2. Make it clear and easy for students to understand.
+3. Include the main topic, key concepts, and important ideas.
+4. Use bullet points when helpful.
+5. Do not invent information outside the context.
+6. At the end, mention the source pages used.
+
+Document context:
+{context}
+
+Summary:
+"""
+    return generate_text_with_fallback(prompt.strip())

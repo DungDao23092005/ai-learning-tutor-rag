@@ -2,7 +2,8 @@ import streamlit as st
 
 from src.document_loader import get_document_stats, load_pdf_pages
 from src.embedding import create_embedding, create_embeddings_for_chunks, get_embedding_stats
-from src.rag_chain import generate_rag_answer
+from src.quiz_generator import check_quiz_answers, generate_quiz
+from src.rag_chain import generate_document_summary, generate_rag_answer
 from src.text_splitter import get_chunk_stats, split_pages_into_chunks
 from src.vector_store import (
     get_vector_store_stats,
@@ -60,6 +61,15 @@ if "rag_answer" not in st.session_state:
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "document_summary" not in st.session_state:
+    st.session_state.document_summary = ""
+
+if "generated_quiz" not in st.session_state:
+    st.session_state.generated_quiz = []
+
+if "quiz_results" not in st.session_state:
+    st.session_state.quiz_results = None
 
 
 # =========================
@@ -136,6 +146,9 @@ if uploaded_file is not None:
         st.session_state.retrieved_chunks = []
         st.session_state.rag_answer = ""
         st.session_state.chat_history = []
+        st.session_state.document_summary = ""
+        st.session_state.generated_quiz = []
+        st.session_state.quiz_results = None
         reset_vector_store()
 
     # Process PDF
@@ -495,14 +508,35 @@ with chat_tab:
 with summary_tab:
     st.subheader("Summarize document")
 
-    if st.button("Generate Summary"):
+    st.caption(
+        "Generate a student-friendly summary from the uploaded PDF."
+    )
+
+    if st.button("Generate Summary", type="primary"):
         if uploaded_file is None:
             st.error("Please upload a PDF first.")
+        elif not st.session_state.text_chunks:
+            st.error("No text chunks available. Please upload a valid text-based PDF.")
         else:
-            st.info("Document summary will be generated here in a later commit.")
+            try:
+                with st.spinner("Generating document summary with Gemini..."):
+                    summary = generate_document_summary(
+                        st.session_state.text_chunks
+                    )
+
+                    st.session_state.document_summary = summary
+
+                st.success("Summary generated successfully.")
+
+            except Exception as error:
+                st.error(f"Failed to generate summary: {error}")
 
     st.markdown("### Summary")
-    st.write("The document summary will appear here.")
+
+    if st.session_state.document_summary:
+        st.write(st.session_state.document_summary)
+    else:
+        st.write("The document summary will appear here.")
 
 
 # =========================
@@ -511,6 +545,11 @@ with summary_tab:
 with quiz_tab:
     st.subheader("Generate quiz from document")
 
+    st.caption(
+        "Generate multiple-choice questions from the uploaded PDF, "
+        "then check your answers."
+    )
+
     number_of_questions = st.slider(
         "Number of questions",
         min_value=3,
@@ -518,14 +557,85 @@ with quiz_tab:
         value=5
     )
 
-    if st.button("Generate Quiz"):
+    if st.button("Generate Quiz", type="primary"):
         if uploaded_file is None:
             st.error("Please upload a PDF first.")
+        elif not st.session_state.text_chunks:
+            st.error("No text chunks available. Please upload a valid text-based PDF.")
         else:
-            st.info(
-                f"{number_of_questions} quiz questions will be generated here "
-                "in a later commit."
-            )
+            try:
+                with st.spinner("Generating quiz with Gemini..."):
+                    quiz_questions = generate_quiz(
+                        chunks=st.session_state.text_chunks,
+                        number_of_questions=number_of_questions
+                    )
+
+                    st.session_state.generated_quiz = quiz_questions
+                    st.session_state.quiz_results = None
+
+                    for index in range(len(quiz_questions)):
+                        st.session_state.pop(f"quiz_answer_{index}", None)
+
+                st.success("Quiz generated successfully.")
+
+            except Exception as error:
+                st.error(f"Failed to generate quiz: {error}")
 
     st.markdown("### Quiz")
-    st.write("Generated quiz questions will appear here.")
+
+    if st.session_state.generated_quiz:
+        for index, question in enumerate(st.session_state.generated_quiz):
+            st.markdown(f"**Question {index + 1}. {question['question']}**")
+
+            options = ["A", "B", "C", "D"]
+
+            st.radio(
+                "Choose your answer:",
+                options=options,
+                format_func=lambda option, q=question: (
+                    f"{option}. {q['options'].get(option, '')}"
+                ),
+                key=f"quiz_answer_{index}"
+            )
+
+            st.divider()
+
+        if st.button("Check Answers"):
+            user_answers = {
+                index: st.session_state.get(f"quiz_answer_{index}")
+                for index in range(len(st.session_state.generated_quiz))
+            }
+
+            quiz_results = check_quiz_answers(
+                quiz_questions=st.session_state.generated_quiz,
+                user_answers=user_answers
+            )
+
+            st.session_state.quiz_results = quiz_results
+
+        if st.session_state.quiz_results:
+            results = st.session_state.quiz_results
+
+            st.markdown("### Result")
+            st.metric(
+                "Score",
+                f"{results['score']} / {results['total']}"
+            )
+
+            for index, result in enumerate(results["results"], start=1):
+                if result["is_correct"]:
+                    st.success(
+                        f"Question {index}: Correct. "
+                        f"Your answer: {result['selected_answer']}"
+                    )
+                else:
+                    st.error(
+                        f"Question {index}: Incorrect. "
+                        f"Your answer: {result['selected_answer']} | "
+                        f"Correct answer: {result['correct_answer']}"
+                    )
+
+                st.write(f"**Explanation:** {result['explanation']}")
+
+    else:
+        st.write("Generated quiz questions will appear here.")
