@@ -2,6 +2,7 @@ import streamlit as st
 
 from src.document_loader import get_document_stats, load_pdf_pages
 from src.embedding import create_embedding, create_embeddings_for_chunks, get_embedding_stats
+from src.rag_chain import generate_rag_answer
 from src.text_splitter import get_chunk_stats, split_pages_into_chunks
 from src.vector_store import (
     get_vector_store_stats,
@@ -54,6 +55,9 @@ if "retrieved_chunks" not in st.session_state:
 if "uploaded_file_name" not in st.session_state:
     st.session_state.uploaded_file_name = None
 
+if "rag_answer" not in st.session_state:
+    st.session_state.rag_answer = ""
+
 
 # =========================
 # Sidebar
@@ -77,8 +81,8 @@ with st.sidebar:
     st.divider()
 
     st.info(
-        "Current stage: Vector search with ChromaDB. "
-        "RAG answer generation will be added in the next commit."
+        "Current stage: Source-grounded RAG answer generation. "
+        "Summary and quiz features will be added in the next commits."
     )
 
     st.markdown("### Chunk settings")
@@ -127,6 +131,7 @@ if uploaded_file is not None:
         st.session_state.vector_store_stats = None
         st.session_state.is_vector_store_ready = False
         st.session_state.retrieved_chunks = []
+        st.session_state.rag_answer = ""
         reset_vector_store()
 
     # Process PDF
@@ -388,16 +393,27 @@ with chat_tab:
 
                     st.session_state.retrieved_chunks = retrieved_chunks
 
-                st.success("Relevant chunks retrieved successfully.")
+                with st.spinner("Generating answer with Gemini..."):
+                    rag_answer = generate_rag_answer(
+                        question=user_question,
+                        retrieved_chunks=retrieved_chunks
+                    )
+
+                    st.session_state.rag_answer = rag_answer
+
+                st.success("Answer generated successfully.")
 
             except Exception as error:
-                st.error(f"Failed to retrieve chunks: {error}")
+                st.error(f"Failed to generate answer: {error}")
 
-    st.markdown("### Retrieved Context")
-    st.write(
-        "In the next commit, these chunks will be sent to Gemini "
-        "to generate the final answer."
-    )
+    st.markdown("### Answer")
+
+    if st.session_state.rag_answer:
+        st.write(st.session_state.rag_answer)
+    else:
+        st.write("The answer will appear here after you ask a question.")
+
+    st.markdown("### Sources")
 
     if st.session_state.retrieved_chunks:
         for index, chunk in enumerate(
@@ -413,7 +429,7 @@ with chat_tab:
                 st.write(f"**Chunk index:** {chunk['chunk_index']}")
                 st.write(chunk["text"])
     else:
-        st.write("Relevant chunks will appear here after you ask a question.")
+        st.write("Relevant source chunks will appear here.")
 
 
 # =========================
