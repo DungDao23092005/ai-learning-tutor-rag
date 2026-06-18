@@ -1,6 +1,7 @@
 import streamlit as st
 
 from src.document_loader import get_document_stats, load_pdf_pages
+from src.embedding import create_embeddings_for_chunks, get_embedding_stats
 from src.text_splitter import get_chunk_stats, split_pages_into_chunks
 
 
@@ -31,6 +32,12 @@ if "chunk_stats" not in st.session_state:
 
 if "uploaded_file_name" not in st.session_state:
     st.session_state.uploaded_file_name = None
+
+if "embedded_chunks" not in st.session_state:
+    st.session_state.embedded_chunks = []
+
+if "embedding_stats" not in st.session_state:
+    st.session_state.embedding_stats = None
 
 
 # =========================
@@ -183,6 +190,58 @@ if st.session_state.pdf_pages:
         else:
             st.warning("This page has no extractable text.")
 
+# =========================
+# Embedding section
+# =========================
+if st.session_state.text_chunks:
+    st.markdown("### Embeddings")
+
+    st.write(
+        "Create embeddings for text chunks. "
+        "These vectors will be stored in ChromaDB in the next commit."
+    )
+
+    if st.button("Create Embeddings"):
+        try:
+            with st.spinner("Creating embeddings with Gemini..."):
+                embedded_chunks = create_embeddings_for_chunks(
+                    st.session_state.text_chunks
+                )
+
+                embedding_stats = get_embedding_stats(embedded_chunks)
+
+                st.session_state.embedded_chunks = embedded_chunks
+                st.session_state.embedding_stats = embedding_stats
+
+            st.success("Embeddings created successfully.")
+
+        except Exception as error:
+            st.error(f"Failed to create embeddings: {error}")
+
+    if st.session_state.embedding_stats:
+        col_a, col_b = st.columns(2)
+
+        col_a.metric(
+            "Embedded chunks",
+            st.session_state.embedding_stats["total_embedded_chunks"]
+        )
+
+        col_b.metric(
+            "Embedding dimension",
+            st.session_state.embedding_stats["embedding_dimension"]
+        )
+
+    if st.session_state.embedded_chunks:
+        with st.expander("Preview first embedding"):
+            first_chunk = st.session_state.embedded_chunks[0]
+
+            st.write(f"**Chunk ID:** {first_chunk['chunk_id']}")
+            st.write(f"**Page:** {first_chunk['page_number']}")
+            st.write(f"**Vector length:** {len(first_chunk['embedding'])}")
+
+            st.write("First 10 vector values:")
+
+            st.code(first_chunk["embedding"][:10])
 
 # =========================
 # Chunk preview
