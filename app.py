@@ -1,8 +1,14 @@
 import streamlit as st
 
 from src.document_loader import get_document_stats, load_pdf_pages
-from src.embedding import create_embeddings_for_chunks, get_embedding_stats
+from src.embedding import create_embedding, create_embeddings_for_chunks, get_embedding_stats
 from src.text_splitter import get_chunk_stats, split_pages_into_chunks
+from src.vector_store import (
+    get_vector_store_stats,
+    reset_vector_store,
+    search_relevant_chunks,
+    store_chunks_in_chroma,
+)
 
 
 # =========================
@@ -30,14 +36,23 @@ if "text_chunks" not in st.session_state:
 if "chunk_stats" not in st.session_state:
     st.session_state.chunk_stats = None
 
-if "uploaded_file_name" not in st.session_state:
-    st.session_state.uploaded_file_name = None
-
 if "embedded_chunks" not in st.session_state:
     st.session_state.embedded_chunks = []
 
 if "embedding_stats" not in st.session_state:
     st.session_state.embedding_stats = None
+
+if "vector_store_stats" not in st.session_state:
+    st.session_state.vector_store_stats = None
+
+if "is_vector_store_ready" not in st.session_state:
+    st.session_state.is_vector_store_ready = False
+
+if "retrieved_chunks" not in st.session_state:
+    st.session_state.retrieved_chunks = []
+
+if "uploaded_file_name" not in st.session_state:
+    st.session_state.uploaded_file_name = None
 
 
 # =========================
@@ -62,8 +77,8 @@ with st.sidebar:
     st.divider()
 
     st.info(
-        "Current stage: PDF text chunking. "
-        "Embeddings and vector search will be added in the next commits."
+        "Current stage: Vector search with ChromaDB. "
+        "RAG answer generation will be added in the next commit."
     )
 
     st.markdown("### Chunk settings")
@@ -105,6 +120,14 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     file_bytes = uploaded_file.getvalue()
+
+    if st.session_state.uploaded_file_name != uploaded_file.name:
+        st.session_state.embedded_chunks = []
+        st.session_state.embedding_stats = None
+        st.session_state.vector_store_stats = None
+        st.session_state.is_vector_store_ready = False
+        st.session_state.retrieved_chunks = []
+        reset_vector_store()
 
     # Process PDF
     with st.spinner("Reading and chunking PDF file..."):
@@ -190,6 +213,7 @@ if st.session_state.pdf_pages:
         else:
             st.warning("This page has no extractable text.")
 
+
 # =========================
 # Embedding section
 # =========================
@@ -198,7 +222,7 @@ if st.session_state.text_chunks:
 
     st.write(
         "Create embeddings for text chunks. "
-        "These vectors will be stored in ChromaDB in the next commit."
+        "These vectors will be stored in ChromaDB."
     )
 
     if st.button("Create Embeddings"):
@@ -242,6 +266,52 @@ if st.session_state.text_chunks:
             st.write("First 10 vector values:")
 
             st.code(first_chunk["embedding"][:10])
+
+    st.markdown("### Vector Database")
+
+    if st.session_state.embedded_chunks:
+        if st.button("Store Embeddings in ChromaDB"):
+            try:
+                with st.spinner("Storing embeddings in ChromaDB..."):
+                    reset_vector_store()
+
+                    stored_count = store_chunks_in_chroma(
+                        st.session_state.embedded_chunks
+                    )
+
+                    vector_store_stats = get_vector_store_stats()
+
+                    st.session_state.vector_store_stats = vector_store_stats
+                    st.session_state.is_vector_store_ready = True
+
+                st.success(
+                    f"Stored {stored_count} chunks in ChromaDB successfully."
+                )
+
+            except Exception as error:
+                st.error(f"Failed to store embeddings in ChromaDB: {error}")
+
+    else:
+        st.info("Create embeddings first before storing them in ChromaDB.")
+
+    if st.session_state.vector_store_stats:
+        col_x, col_y, col_z = st.columns(3)
+
+        col_x.metric(
+            "Collection",
+            st.session_state.vector_store_stats["collection_name"]
+        )
+
+        col_y.metric(
+            "Total items",
+            st.session_state.vector_store_stats["total_items"]
+        )
+
+        col_z.metric(
+            "Persist path",
+            st.session_state.vector_store_stats["persist_path"]
+        )
+
 
 # =========================
 # Chunk preview
@@ -299,14 +369,51 @@ with chat_tab:
             st.error("Please upload a PDF first.")
         elif not user_question.strip():
             st.error("Please enter a question.")
+        elif not st.session_state.is_vector_store_ready:
+            st.error(
+                "Please create embeddings and store them in ChromaDB first."
+            )
         else:
-            st.info("RAG answer will be generated here in a later commit.")
+            try:
+                with st.spinner("Searching relevant chunks..."):
+                    query_embedding = create_embedding(
+                        text=user_question,
+                        task_type="RETRIEVAL_QUERY"
+                    )
 
-    st.markdown("### Answer")
-    st.write("The answer will appear here.")
+                    retrieved_chunks = search_relevant_chunks(
+                        query_embedding=query_embedding,
+                        top_k=3
+                    )
 
-    st.markdown("### Sources")
-    st.write("Relevant source chunks and page numbers will appear here.")
+                    st.session_state.retrieved_chunks = retrieved_chunks
+
+                st.success("Relevant chunks retrieved successfully.")
+
+            except Exception as error:
+                st.error(f"Failed to retrieve chunks: {error}")
+
+    st.markdown("### Retrieved Context")
+    st.write(
+        "In the next commit, these chunks will be sent to Gemini "
+        "to generate the final answer."
+    )
+
+    if st.session_state.retrieved_chunks:
+        for index, chunk in enumerate(
+            st.session_state.retrieved_chunks,
+            start=1
+        ):
+            with st.expander(
+                f"Source {index} | Page {chunk['page_number']} | "
+                f"Distance: {chunk['distance']:.4f}"
+            ):
+                st.write(f"**Chunk ID:** {chunk['chunk_id']}")
+                st.write(f"**Page:** {chunk['page_number']}")
+                st.write(f"**Chunk index:** {chunk['chunk_index']}")
+                st.write(chunk["text"])
+    else:
+        st.write("Relevant chunks will appear here after you ask a question.")
 
 
 # =========================
