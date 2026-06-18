@@ -58,6 +58,9 @@ if "uploaded_file_name" not in st.session_state:
 if "rag_answer" not in st.session_state:
     st.session_state.rag_answer = ""
 
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
 
 # =========================
 # Sidebar
@@ -81,7 +84,7 @@ with st.sidebar:
     st.divider()
 
     st.info(
-        "Current stage: Source-grounded RAG answer generation. "
+        "Current stage: RAG chatbot with chat history and source display. "
         "Summary and quiz features will be added in the next commits."
     )
 
@@ -132,6 +135,7 @@ if uploaded_file is not None:
         st.session_state.is_vector_store_ready = False
         st.session_state.retrieved_chunks = []
         st.session_state.rag_answer = ""
+        st.session_state.chat_history = []
         reset_vector_store()
 
     # Process PDF
@@ -360,20 +364,66 @@ chat_tab, summary_tab, quiz_tab = st.tabs(
 # Chat tab
 # =========================
 with chat_tab:
-    st.subheader("Ask questions from your PDF")
+    st.subheader("Chat with your PDF")
 
-    user_question = st.text_input(
-        "Your question",
-        placeholder="Example: What is Linear Regression?"
+    st.caption(
+        "Ask questions about the uploaded document. "
+        "The assistant will answer using retrieved source chunks."
     )
 
-    ask_button = st.button("Ask", type="primary")
+    col_clear, col_status = st.columns([1, 3])
 
-    if ask_button:
+    with col_clear:
+        clear_chat = st.button("Clear chat")
+
+    with col_status:
+        if st.session_state.is_vector_store_ready:
+            st.success("Vector database is ready. You can ask questions.")
+        else:
+            st.warning(
+                "Please create embeddings and store them in ChromaDB first."
+            )
+
+    if clear_chat:
+        st.session_state.chat_history = []
+        st.session_state.retrieved_chunks = []
+        st.session_state.rag_answer = ""
+        st.rerun()
+
+    # Display chat history
+    if st.session_state.chat_history:
+        for chat_item in st.session_state.chat_history:
+            with st.chat_message("user"):
+                st.write(chat_item["question"])
+
+            with st.chat_message("assistant"):
+                st.write(chat_item["answer"])
+
+                with st.expander("View sources"):
+                    for index, chunk in enumerate(
+                        chat_item["sources"],
+                        start=1
+                    ):
+                        st.markdown(
+                            f"**Source {index} — Page {chunk['page_number']}**"
+                        )
+                        st.caption(
+                            f"Chunk ID: {chunk['chunk_id']} | "
+                            f"Chunk index: {chunk['chunk_index']} | "
+                            f"Distance: {chunk['distance']:.4f}"
+                        )
+                        st.write(chunk["text"])
+                        st.divider()
+    else:
+        st.info("No chat history yet. Ask your first question below.")
+
+    user_question = st.chat_input(
+        "Ask something from your PDF..."
+    )
+
+    if user_question:
         if uploaded_file is None:
             st.error("Please upload a PDF first.")
-        elif not user_question.strip():
-            st.error("Please enter a question.")
         elif not st.session_state.is_vector_store_ready:
             st.error(
                 "Please create embeddings and store them in ChromaDB first."
@@ -391,17 +441,24 @@ with chat_tab:
                         top_k=3
                     )
 
-                    st.session_state.retrieved_chunks = retrieved_chunks
-
                 with st.spinner("Generating answer with Gemini..."):
                     rag_answer = generate_rag_answer(
                         question=user_question,
                         retrieved_chunks=retrieved_chunks
                     )
 
-                    st.session_state.rag_answer = rag_answer
+                st.session_state.retrieved_chunks = retrieved_chunks
+                st.session_state.rag_answer = rag_answer
 
-                st.success("Answer generated successfully.")
+                st.session_state.chat_history.append(
+                    {
+                        "question": user_question,
+                        "answer": rag_answer,
+                        "sources": retrieved_chunks,
+                    }
+                )
+
+                st.rerun()
 
             except Exception as error:
                 st.error(f"Failed to generate answer: {error}")
