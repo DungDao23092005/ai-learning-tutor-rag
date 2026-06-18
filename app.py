@@ -1,5 +1,7 @@
 import streamlit as st
 
+from src.document_loader import get_document_stats, load_pdf_pages
+
 
 # =========================
 # Page configuration
@@ -9,6 +11,19 @@ st.set_page_config(
     page_icon="📚",
     layout="wide"
 )
+
+
+# =========================
+# Session state
+# =========================
+if "pdf_pages" not in st.session_state:
+    st.session_state.pdf_pages = []
+
+if "pdf_stats" not in st.session_state:
+    st.session_state.pdf_stats = None
+
+if "uploaded_file_name" not in st.session_state:
+    st.session_state.uploaded_file_name = None
 
 
 # =========================
@@ -33,8 +48,8 @@ with st.sidebar:
     st.divider()
 
     st.info(
-        "Current stage: UI prototype. "
-        "PDF processing and RAG features will be added in the next commits."
+        "Current stage: PDF upload and text extraction. "
+        "RAG features will be added in the next commits."
     )
 
 
@@ -57,9 +72,71 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
+    file_bytes = uploaded_file.getvalue()
+
+    # Only process again when a new file is uploaded
+    if st.session_state.uploaded_file_name != uploaded_file.name:
+        with st.spinner("Reading PDF file..."):
+            pages = load_pdf_pages(file_bytes)
+            stats = get_document_stats(pages)
+
+            st.session_state.pdf_pages = pages
+            st.session_state.pdf_stats = stats
+            st.session_state.uploaded_file_name = uploaded_file.name
+
     st.success(f"Uploaded file: {uploaded_file.name}")
+
+    stats = st.session_state.pdf_stats
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("Total pages", stats["total_pages"])
+    col2.metric("Pages with text", stats["pages_with_text"])
+    col3.metric("Words", stats["total_words"])
+    col4.metric("Characters", stats["total_characters"])
+
+    if stats["pages_with_text"] == 0:
+        st.error(
+            "No text was extracted from this PDF. "
+            "This may be a scanned PDF image. OCR support can be added later."
+        )
+
 else:
     st.warning("Please upload a PDF file to start.")
+
+
+# =========================
+# PDF preview
+# =========================
+if st.session_state.pdf_pages:
+    with st.expander("Preview extracted text"):
+        selected_page = st.selectbox(
+            "Select page",
+            options=[
+                page["page_number"]
+                for page in st.session_state.pdf_pages
+            ]
+        )
+
+        page_data = next(
+            page
+            for page in st.session_state.pdf_pages
+            if page["page_number"] == selected_page
+        )
+
+        preview_text = page_data["text"]
+
+        if preview_text.strip():
+            st.text_area(
+                label=f"Page {selected_page} text",
+                value=preview_text[:3000],
+                height=300
+            )
+
+            if len(preview_text) > 3000:
+                st.caption("Preview is limited to the first 3000 characters.")
+        else:
+            st.warning("This page has no extractable text.")
 
 
 # =========================
