@@ -1,6 +1,7 @@
 import streamlit as st
 
 from src.document_loader import get_document_stats, load_pdf_pages
+from src.text_splitter import get_chunk_stats, split_pages_into_chunks
 
 
 # =========================
@@ -21,6 +22,12 @@ if "pdf_pages" not in st.session_state:
 
 if "pdf_stats" not in st.session_state:
     st.session_state.pdf_stats = None
+
+if "text_chunks" not in st.session_state:
+    st.session_state.text_chunks = []
+
+if "chunk_stats" not in st.session_state:
+    st.session_state.chunk_stats = None
 
 if "uploaded_file_name" not in st.session_state:
     st.session_state.uploaded_file_name = None
@@ -48,8 +55,26 @@ with st.sidebar:
     st.divider()
 
     st.info(
-        "Current stage: PDF upload and text extraction. "
-        "RAG features will be added in the next commits."
+        "Current stage: PDF text chunking. "
+        "Embeddings and vector search will be added in the next commits."
+    )
+
+    st.markdown("### Chunk settings")
+
+    chunk_size = st.slider(
+        "Chunk size",
+        min_value=500,
+        max_value=2000,
+        value=1000,
+        step=100
+    )
+
+    chunk_overlap = st.slider(
+        "Chunk overlap",
+        min_value=50,
+        max_value=500,
+        value=200,
+        step=50
     )
 
 
@@ -74,28 +99,48 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     file_bytes = uploaded_file.getvalue()
 
-    # Only process again when a new file is uploaded
-    if st.session_state.uploaded_file_name != uploaded_file.name:
-        with st.spinner("Reading PDF file..."):
-            pages = load_pdf_pages(file_bytes)
-            stats = get_document_stats(pages)
+    # Process PDF
+    with st.spinner("Reading and chunking PDF file..."):
+        pages = load_pdf_pages(file_bytes)
+        pdf_stats = get_document_stats(pages)
 
-            st.session_state.pdf_pages = pages
-            st.session_state.pdf_stats = stats
-            st.session_state.uploaded_file_name = uploaded_file.name
+        chunks = split_pages_into_chunks(
+            pages=pages,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
+        chunk_stats = get_chunk_stats(chunks)
+
+        st.session_state.pdf_pages = pages
+        st.session_state.pdf_stats = pdf_stats
+        st.session_state.text_chunks = chunks
+        st.session_state.chunk_stats = chunk_stats
+        st.session_state.uploaded_file_name = uploaded_file.name
 
     st.success(f"Uploaded file: {uploaded_file.name}")
 
-    stats = st.session_state.pdf_stats
+    pdf_stats = st.session_state.pdf_stats
+    chunk_stats = st.session_state.chunk_stats
+
+    st.markdown("### Document statistics")
 
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Total pages", stats["total_pages"])
-    col2.metric("Pages with text", stats["pages_with_text"])
-    col3.metric("Words", stats["total_words"])
-    col4.metric("Characters", stats["total_characters"])
+    col1.metric("Total pages", pdf_stats["total_pages"])
+    col2.metric("Pages with text", pdf_stats["pages_with_text"])
+    col3.metric("Words", pdf_stats["total_words"])
+    col4.metric("Characters", pdf_stats["total_characters"])
 
-    if stats["pages_with_text"] == 0:
+    st.markdown("### Chunk statistics")
+
+    col5, col6, col7, col8 = st.columns(4)
+
+    col5.metric("Total chunks", chunk_stats["total_chunks"])
+    col6.metric("Average length", chunk_stats["average_chunk_length"])
+    col7.metric("Min length", chunk_stats["min_chunk_length"])
+    col8.metric("Max length", chunk_stats["max_chunk_length"])
+
+    if pdf_stats["pages_with_text"] == 0:
         st.error(
             "No text was extracted from this PDF. "
             "This may be a scanned PDF image. OCR support can be added later."
@@ -137,6 +182,36 @@ if st.session_state.pdf_pages:
                 st.caption("Preview is limited to the first 3000 characters.")
         else:
             st.warning("This page has no extractable text.")
+
+
+# =========================
+# Chunk preview
+# =========================
+if st.session_state.text_chunks:
+    with st.expander("Preview text chunks"):
+        selected_chunk_id = st.selectbox(
+            "Select chunk",
+            options=[
+                chunk["chunk_id"]
+                for chunk in st.session_state.text_chunks
+            ]
+        )
+
+        chunk_data = next(
+            chunk
+            for chunk in st.session_state.text_chunks
+            if chunk["chunk_id"] == selected_chunk_id
+        )
+
+        st.write(f"**Chunk ID:** {chunk_data['chunk_id']}")
+        st.write(f"**Page:** {chunk_data['page_number']}")
+        st.write(f"**Chunk index in page:** {chunk_data['chunk_index']}")
+
+        st.text_area(
+            label="Chunk text",
+            value=chunk_data["text"],
+            height=250
+        )
 
 
 # =========================
