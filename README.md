@@ -20,6 +20,7 @@ This project was built as a portfolio project for AI Engineer / Machine Learning
 * Generate multiple-choice quizzes
 * Check quiz answers and explain mistakes
 * Store chat history in the app session
+* Light and dark mode toggle
 
 ## Tech Stack
 
@@ -187,16 +188,23 @@ Tạo 5 câu trắc nghiệm từ tài liệu này.
 
 ## Screenshots
 
-Add screenshots to the `screenshots/` folder:
+### Upload PDF and document statistics
+![Upload PDF](screenshots/upload_pdf.png)
 
-```text
-screenshots/
-├── upload_pdf.png
-├── chat_answer.png
-├── source_display.png
-├── summary.png
-└── quiz_generation.png
-```
+### RAG answer with source pages
+![Chat Answer](screenshots/chat_answer.png)
+
+### Source chunk display
+![Source Display](screenshots/source_display.png)
+
+### Document summary
+![Summary](screenshots/summary.png)
+
+### Quiz generation and answer checking
+![Quiz Generation](screenshots/quiz_generation.png)
+
+### Light and dark mode
+![Dark Mode](screenshots/dark_mode.png)
 
 Suggested screenshots:
 
@@ -206,7 +214,7 @@ Suggested screenshots:
 4. Document summary
 5. Quiz generation and score result
 
-## Commit History Plan
+## Development Process
 
 This project was developed step by step with meaningful Git commits:
 
@@ -221,6 +229,7 @@ This project was developed step by step with meaningful Git commits:
 8. feat: add chat history and improved source display
 9. feat: add document summary and quiz generation
 10. docs: polish README and project documentation
+11. feat: add light and dark mode toggle
 ```
 
 ## Current Limitations

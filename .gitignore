@@ -14,9 +14,12 @@ chroma_db/
 # Streamlit
 .streamlit/secrets.toml
 
-# Data files
+# Uploaded user data
 data/uploads/
-*.pdf
+
+# Keep sample docs folder
+!data/sample_docs/
+!data/sample_docs/.gitkeep
 
 # Jupyter
 .ipynb_checkpoints/
