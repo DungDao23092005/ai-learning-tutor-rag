@@ -1,5 +1,6 @@
 import streamlit as st
 
+from src.theme import apply_custom_theme
 from src.document_loader import get_document_stats, load_pdf_pages
 from src.embedding import create_embedding, create_embeddings_for_chunks, get_embedding_stats
 from src.quiz_generator import check_quiz_answers, generate_quiz
@@ -71,12 +72,25 @@ if "generated_quiz" not in st.session_state:
 if "quiz_results" not in st.session_state:
     st.session_state.quiz_results = None
 
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+# =========================
+# Apply theme
+# =========================
+apply_custom_theme(st.session_state.dark_mode)
+
 
 # =========================
 # Sidebar
 # =========================
 with st.sidebar:
     st.title("📚 AI Tutor RAG")
+
+    st.toggle(
+        "🌙 Dark mode",
+        key="dark_mode"
+    )
 
     st.markdown(
         """
@@ -94,8 +108,8 @@ with st.sidebar:
     st.divider()
 
     st.info(
-        "Current stage: RAG chatbot with chat history and source display. "
-        "Summary and quiz features will be added in the next commits."
+        "Current stage: Completed MVP with RAG chat, source display, "
+        "summary generation, quiz generation, and answer checking."
     )
 
     st.markdown("### Chunk settings")
@@ -115,6 +129,7 @@ with st.sidebar:
         value=200,
         step=50
     )
+
 
 
 # =========================
