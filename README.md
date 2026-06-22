@@ -1,4 +1,3 @@
-````markdown
 # AI Learning Tutor RAG
 
 AI Learning Tutor RAG is a personal AI project that helps students learn from their own PDF documents using Retrieval-Augmented Generation (RAG).
@@ -375,4 +374,3 @@ Through this project, I practiced:
 ## License
 
 This project is intended for educational and portfolio purposes.
-````
