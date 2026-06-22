@@ -1,0 +1,12 @@
+services:
+  ai-learning-tutor-rag:
+    build: .
+    container_name: ai-learning-tutor-rag
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./data/uploads:/app/data/uploads
+      - ./.chroma:/app/.chroma
+    restart: unless-stopped
