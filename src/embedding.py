@@ -1,4 +1,6 @@
+import asyncio
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List
 
 from dotenv import load_dotenv
@@ -7,6 +9,7 @@ from google.genai import types
 
 
 EMBEDDING_MODEL = "gemini-embedding-001"
+_MAX_WORKERS = 5
 
 
 def get_gemini_client() -> genai.Client:
@@ -84,6 +87,56 @@ def create_embeddings_for_chunks(chunks: List[Dict]) -> List[Dict]:
         embedded_chunks.append(embedded_chunk)
 
     return embedded_chunks
+
+
+def create_embeddings_for_chunks_parallel(chunks: List[Dict]) -> List[Dict]:
+    """
+    Create embeddings for all text chunks using a thread pool.
+
+    This reduces total processing time when embedding many chunks
+    by running up to _MAX_WORKERS API calls concurrently.
+
+    Args:
+        chunks: List of chunk dictionaries from text_splitter.py
+
+    Returns:
+        A new list of chunks with an extra 'embedding' field.
+    """
+    if not chunks:
+        return []
+
+    embedded_chunks = [None] * len(chunks)
+
+    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+        future_map = {}
+
+        for index, chunk in enumerate(chunks):
+            future = executor.submit(
+                create_embedding,
+                text=chunk["text"],
+                task_type="RETRIEVAL_DOCUMENT",
+            )
+            future_map[future] = (index, chunk)
+
+        for future in as_completed(future_map):
+            index, chunk = future_map[future]
+            embedding = future.result()
+            embedded_chunks[index] = {**chunk, "embedding": embedding}
+
+    return embedded_chunks
+
+
+async def create_embeddings_for_chunks_async(chunks: List[Dict]) -> List[Dict]:
+    """
+    Async wrapper around create_embeddings_for_chunks_parallel.
+
+    Uses asyncio.to_thread to offload the thread-pool work
+    without blocking the async event loop (useful in FastAPI endpoints).
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None, create_embeddings_for_chunks_parallel, chunks
+    )
 
 
 def get_embedding_stats(embedded_chunks: List[Dict]) -> Dict:

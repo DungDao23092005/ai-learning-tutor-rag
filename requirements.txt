@@ -1,6 +1,24 @@
+# Core
 streamlit
 google-genai
 chromadb
 pypdf
 python-dotenv
 pandas
+
+# FastAPI backend
+fastapi
+uvicorn[standard]
+python-multipart
+
+# LLM provider abstraction
+openai
+
+# Testing
+pytest
+pytest-cov
+httpx
+
+# Async
+asyncio
+aiofiles

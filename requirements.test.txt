@@ -1,0 +1,4 @@
+# Testing dependencies (installed separately in CI)
+pytest
+pytest-cov
+httpx

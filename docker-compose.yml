@@ -1,9 +1,26 @@
 services:
-  ai-learning-tutor-rag:
+
+  streamlit-frontend:
     build: .
-    container_name: ai-learning-tutor-rag
+    container_name: ai-tutor-streamlit
     ports:
       - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./data/uploads:/app/data/uploads
+      - ./.chroma:/app/.chroma
+    restart: unless-stopped
+    depends_on:
+      - api-backend
+
+  api-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ai-tutor-api
+    ports:
+      - "8000:8000"
     env_file:
       - .env
     volumes:

@@ -24,6 +24,11 @@ data/uploads/
 # Jupyter
 .ipynb_checkpoints/
 
+# Testing & coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
 # OS
 .DS_Store
 Thumbs.db
